@@ -2,6 +2,7 @@ extends:
   - standard-with-typescript
   - airbnb/hooks
   - plugin:@typescript-eslint/recommended
+  - '@unocss'
 parser: '@typescript-eslint/parser'
 parserOptions:
   project: './tsconfig.json'
@@ -18,6 +19,7 @@ rules:
     newlines-between: always,
     alphabetize: { order: asc }
   }]
+  jsx-quotes: [error, prefer-double]
   '@typescript-eslint/indent': [error, 4]
   '@typescript-eslint/explicit-function-return-type': off
   '@typescript-eslint/restrict-template-expressions': off
@@ -27,3 +29,6 @@ rules:
   '@typescript-eslint/promise-function-async': off
   '@typescript-eslint/no-floating-promises': off
   '@typescript-eslint/no-invalid-void-type': off
+  '@typescript-eslint/no-misused-promises': off
+  '@typescript-eslint/no-confusing-void-expression': off
+  '@typescript-eslint/comma-dangle': [error, only-multiline]

@@ -1,7 +1,6 @@
-import * as API from '@lib/request'
+import type * as API from '@lib/request'
 
-import { Proxy, ProxyGroup } from './Proxy'
-import { Rule } from './Rule'
+import { type Rule } from './Rule'
 
 /**
  * clash config
@@ -56,10 +55,6 @@ export interface Config {
          */
         logLevel?: string
     }
-
-    proxy?: Proxy[]
-
-    proxyGroup?: ProxyGroup[]
 
     rules?: Rule[]
 

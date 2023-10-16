@@ -2,7 +2,7 @@ import { useAtom } from 'jotai'
 import { useMemo } from 'react'
 
 import { Tags, Tag } from '@components'
-import { Group as IGroup } from '@lib/request'
+import { type Group as IGroup } from '@lib/request'
 import { useProxy, useConfig, proxyMapping, useClient } from '@stores'
 
 import './style.scss'
@@ -38,7 +38,8 @@ export function Group (props: GroupProps) {
         const set = new Set<string>()
         for (const proxy of config.all) {
             const history = proxyMap.get(proxy)?.history
-            if (history?.length && history.slice(-1)[0].delay === 0) {
+            const alive = proxyMap.get(proxy)?.alive
+            if (alive === false || (history?.length && history.slice(-1)[0].delay === 0)) {
                 set.add(proxy)
             }
         }
@@ -49,8 +50,8 @@ export function Group (props: GroupProps) {
     const canClick = config.type === 'Selector'
     return (
         <div className="proxy-group">
-            <div className="flex h-10 mt-4 w-full items-center justify-between md:(h-15 mt-0 w-auto) ">
-                <span className="h-6 px-5 w-35 overflow-hidden overflow-ellipsis whitespace-nowrap md:w-30">{ config.name }</span>
+            <div className="mt-4 h-10 w-full flex items-center justify-between md:mt-0 md:h-15 md:w-auto">
+                <span className="overflow-ellipsis h-6 w-35 overflow-hidden whitespace-nowrap px-5 md:w-30">{ config.name }</span>
                 <Tag className="mr-5 md:mr-0">{ config.type }</Tag>
             </div>
             <div className="flex-1 py-2 md:py-4">

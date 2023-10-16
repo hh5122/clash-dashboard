@@ -1,7 +1,8 @@
-import { atom, useAtom } from 'jotai'
-import { atomWithStorage, useAtomValue } from 'jotai/utils'
-import { useLocation } from 'react-use'
+import { atom, useAtom, useAtomValue } from 'jotai'
+import { atomWithStorage } from 'jotai/utils'
+import { useLocation } from 'react-router-dom'
 
+import { isIP } from '@lib/ip'
 import { isClashX, jsBridge } from '@lib/jsBridge'
 import { Client } from '@lib/request'
 
@@ -19,16 +20,49 @@ const clashxConfigAtom = atom(async () => {
     }
 })
 
-export const localStorageAtom = atomWithStorage<Array<{
+function getControllerFromLocation (): string | null {
+    if (!isIP(location.hostname)) {
+        return null
+    }
+
+    if (location.port !== '') {
+        return JSON.stringify([
+            {
+                hostname: location.hostname,
+                port: +location.port,
+                secret: '',
+            },
+        ])
+    }
+
+    const port = location.protocol === 'https:' ? 443 : 80
+    return JSON.stringify([
+        {
+            hostname: location.hostname,
+            port,
+            secret: '',
+        },
+    ])
+}
+
+// jotai v2 use initialValue first avoid hydration warning, but we don't want that
+const hostsStorageOrigin = localStorage.getItem('externalControllers') ??
+    getControllerFromLocation() ??
+    '[{ "hostname": "127.0.0.1", "port": 7890, "secret": "" }]'
+const hostSelectIdxStorageOrigin = localStorage.getItem('externalControllerIndex') ?? '0'
+
+export const hostsStorageAtom = atomWithStorage<Array<{
     hostname: string
     port: string
     secret: string
-}>>('externalControllers', [])
+}>>('externalControllers', JSON.parse(hostsStorageOrigin))
+export const hostSelectIdxStorageAtom = atomWithStorage<number>('externalControllerIndex', parseInt(hostSelectIdxStorageOrigin))
 
 export function useAPIInfo () {
     const clashx = useAtomValue(clashxConfigAtom)
     const location = useLocation()
-    const localStorage = useAtomValue(localStorageAtom)
+    const hostSelectIdxStorage = useAtomValue(hostSelectIdxStorageAtom)
+    const hostsStorage = useAtomValue(hostsStorageAtom)
 
     if (clashx != null) {
         return clashx
@@ -45,9 +79,9 @@ export function useAPIInfo () {
 
     const qs = new URLSearchParams(location.search)
 
-    const hostname = qs.get('host') ?? localStorage?.[0]?.hostname ?? url?.hostname ?? '127.0.0.1'
-    const port = qs.get('port') ?? localStorage?.[0]?.port ?? url?.port ?? '9090'
-    const secret = qs.get('secret') ?? localStorage?.[0]?.secret ?? url?.username ?? ''
+    const hostname = qs.get('host') ?? hostsStorage?.[hostSelectIdxStorage]?.hostname ?? url?.hostname ?? '127.0.0.1'
+    const port = qs.get('port') ?? hostsStorage?.[hostSelectIdxStorage]?.port ?? url?.port ?? '9090'
+    const secret = qs.get('secret') ?? hostsStorage?.[hostSelectIdxStorage]?.secret ?? url?.username ?? ''
     const protocol = qs.get('protocol') ?? hostname === '127.0.0.1' ? 'http:' : (url?.protocol ?? window.location.protocol)
 
     return { hostname, port, secret, protocol }

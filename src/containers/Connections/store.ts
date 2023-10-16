@@ -1,7 +1,7 @@
-import produce from 'immer'
+import { produce } from 'immer'
 import { useState, useMemo, useRef, useCallback } from 'react'
 
-import * as API from '@lib/request'
+import type * as API from '@lib/request'
 
 export type Connection = API.Connections & { completed?: boolean, uploadSpeed: number, downloadSpeed: number }
 
@@ -15,6 +15,7 @@ export interface FormatConnection {
     download: number
     type: string
     network: string
+    process?: string
     sourceIP: string
     speed: {
         upload: number

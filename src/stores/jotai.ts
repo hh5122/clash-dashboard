@@ -1,23 +1,24 @@
-import { AxiosError } from 'axios'
-import produce from 'immer'
-import { atom, useAtom } from 'jotai'
-import { atomWithImmer } from 'jotai/immer'
-import { atomWithStorage, useUpdateAtom } from 'jotai/utils'
-import { get } from 'lodash-es'
+import { usePreviousDistinct, useSyncedRef } from '@react-hookz/web'
+import { type AxiosError } from 'axios'
+import { produce } from 'immer'
+import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { atomWithStorage } from 'jotai/utils'
+import { atomWithImmer } from 'jotai-immer'
 import { ResultAsync } from 'neverthrow'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import * as R from 'remeda'
 import useSWR from 'swr'
-import { Get } from 'type-fest'
+import { type Get } from 'type-fest'
 
-import { Language, locales, Lang, getDefaultLanguage } from '@i18n'
+import { Language, locales, type Lang, getDefaultLanguage, type LocalizedType } from '@i18n'
 import { partition } from '@lib/helper'
-import { useWarpImmerSetter, WritableDraft } from '@lib/jotai'
+import { useWarpImmerSetter, type WritableDraft } from '@lib/jotai'
 import { isClashX, jsBridge } from '@lib/jsBridge'
-import { Snapshot } from '@lib/request'
-import * as API from '@lib/request'
+import type * as API from '@lib/request'
 import { StreamReader } from '@lib/streamer'
-import * as Models from '@models'
-import { Log } from '@models/Log'
+import { type Infer } from '@lib/type'
+import type * as Models from '@models'
+import { type Log } from '@models/Log'
 
 import { useAPIInfo, useClient } from './request'
 
@@ -30,9 +31,13 @@ export function useI18n () {
     const lang = useMemo(() => defaultLang ?? getDefaultLanguage(), [defaultLang])
 
     const translation = useCallback(
-        function <Namespace extends keyof typeof Language['en_US']>(namespace: Namespace) {
-            function t<Path extends string> (path: Path): Get<typeof Language['en_US'][Namespace], Path> {
-                return get(Language[lang][namespace], path)
+        function <Namespace extends keyof LocalizedType>(namespace: Namespace) {
+            function t<Path extends Infer<LocalizedType[Namespace]>> (path: Path) {
+                type returnType = Get<LocalizedType[Namespace], Path>
+                const obj = Language[lang][namespace]
+                const objPath = R.stringToPath(path)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                return R.pathOr(obj, objPath as any, '' as any) as returnType
             }
             return { t }
         },
@@ -50,7 +55,7 @@ export const version = atom({
 export function useVersion () {
     const [data, set] = useAtom(version)
     const client = useClient()
-    const setIdentity = useUpdateAtom(identityAtom)
+    const setIdentity = useSetAtom(identityAtom)
 
     useSWR([client], async function () {
         const result = await ResultAsync.fromPromise(client.getVersion(), e => e as AxiosError)
@@ -86,6 +91,7 @@ export function useRuleProviders () {
 
 export const configAtom = atomWithStorage('profile', {
     breakConnections: false,
+    logLevel: '',
 })
 
 export function useConfig () {
@@ -167,7 +173,7 @@ export function useProxy () {
             .filter(key => !unUsedProxy.has(key))
             .map(key => ({ ...allProxies.data.proxies[key], name: key }))
         const [proxy, groups] = partition(proxies, proxy => !policyGroup.has(proxy.type))
-        set({ proxies: proxy as API.Proxy[], groups: groups as API.Group[], global: global })
+        set({ proxies: proxy as API.Proxy[], groups: groups as API.Group[], global })
     })
 
     const markProxySelected = useCallback((name: string, selected: string) => {
@@ -244,49 +250,44 @@ export function useRule () {
     return { rules: data, update }
 }
 
-const logsAtom = atom({
-    key: '',
-    instance: null as StreamReader<Log> | null,
-})
+const logsAtom = atom(new StreamReader<Log>({ bufferLength: 200 }))
 
 export function useLogsStreamReader () {
     const apiInfo = useAPIInfo()
     const { general } = useGeneral()
-    const version = useVersion()
-    const [item, setItem] = useAtom(logsAtom)
+    const { data: { logLevel } } = useConfig()
+    const item = useAtomValue(logsAtom)
 
-    if (!version.version || !general.logLevel) {
-        return null
-    }
+    const level = logLevel || general.logLevel
+    const previousKey = usePreviousDistinct(
+        `${apiInfo.protocol}//${apiInfo.hostname}:${apiInfo.port}/logs?level=${level}&secret=${encodeURIComponent(apiInfo.secret)}`,
+    )
 
-    const useWebsocket = !!version.version || true
-    const key = `${apiInfo.protocol}//${apiInfo.hostname}:${apiInfo.port}/logs?level=${general.logLevel ?? ''}&useWebsocket=${useWebsocket}&secret=${apiInfo.secret}`
-    if (item.key === key) {
-        return item.instance!
-    }
+    const apiInfoRef = useSyncedRef(apiInfo)
 
-    const oldInstance = item.instance
+    useEffect(() => {
+        if (level) {
+            const apiInfo = apiInfoRef.current
+            const protocol = apiInfo.protocol === 'http:' ? 'ws:' : 'wss:'
+            const logUrl = `${protocol}//${apiInfo.hostname}:${apiInfo.port}/logs?level=${level}&token=${encodeURIComponent(apiInfo.secret)}`
+            item.connect(logUrl)
+        }
+    }, [apiInfoRef, item, level, previousKey])
 
-    const logUrl = `${apiInfo.protocol}//${apiInfo.hostname}:${apiInfo.port}/logs?level=${general.logLevel ?? ''}`
-    const instance = new StreamReader<Log>({ url: logUrl, bufferLength: 200, token: apiInfo.secret, useWebsocket })
-    setItem({ key, instance })
-
-    if (oldInstance != null) {
-        oldInstance.destory()
-    }
-
-    return instance
+    return item
 }
 
 export function useConnectionStreamReader () {
     const apiInfo = useAPIInfo()
-    const version = useVersion()
 
-    const useWebsocket = !!version.version || true
+    const connection = useRef(new StreamReader<API.Snapshot>({ bufferLength: 200 }))
 
-    const url = `${apiInfo.protocol}//${apiInfo.hostname}:${apiInfo.port}/connections`
-    return useMemo(
-        () => version.version ? new StreamReader<Snapshot>({ url, bufferLength: 200, token: apiInfo.secret, useWebsocket }) : null,
-        [apiInfo.secret, url, useWebsocket, version.version],
-    )
+    const protocol = apiInfo.protocol === 'http:' ? 'ws:' : 'wss:'
+    const url = `${protocol}//${apiInfo.hostname}:${apiInfo.port}/connections?token=${encodeURIComponent(apiInfo.secret)}`
+
+    useEffect(() => {
+        connection.current.connect(url)
+    }, [url])
+
+    return connection.current
 }

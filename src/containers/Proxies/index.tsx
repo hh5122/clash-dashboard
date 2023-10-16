@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { Card, Header, Icon, Checkbox } from '@components'
 import EE from '@lib/event'
 import { useRound } from '@lib/hook'
-import * as API from '@lib/request'
+import type * as API from '@lib/request'
 import { useI18n, useConfig, useProxy, useProxyProviders, useGeneral } from '@stores'
 
 import { Proxy, Group, Provider } from './components'
@@ -24,7 +24,9 @@ const sortMap = {
 export function compareDesc (a: API.Proxy, b: API.Proxy) {
     const lastDelayA = (a.history.length > 0) ? a.history.slice(-1)[0].delay : 0
     const lastDelayB = (b.history.length > 0) ? b.history.slice(-1)[0].delay : 0
-    return (lastDelayB || Number.MAX_SAFE_INTEGER) - (lastDelayA || Number.MAX_SAFE_INTEGER)
+    const delayA = a.alive === false ? 0 : lastDelayA
+    const delayB = b.alive === false ? 0 : lastDelayB
+    return (delayB || Number.MAX_SAFE_INTEGER) - (delayA || Number.MAX_SAFE_INTEGER)
 }
 
 function ProxyGroups () {
@@ -45,7 +47,7 @@ function ProxyGroups () {
             <div className="flex flex-col">
                 <Header title={t('groupTitle')}>
                     <Checkbox
-                        className="cursor-pointer text-sm text-shadow-primary text-primary-600"
+                        className="cursor-pointer text-sm text-primary-600 text-shadow-primary"
                         checked={config.breakConnections}
                         onChange={value => setConfig('breakConnections', value)}>
                         {t('breakConnectionsText')}

@@ -34,7 +34,7 @@
     },
     "include": [
         "src",
-        "windi.config.ts",
-        "vite.config.ts"
+        "vite.config.ts",
+        "uno.config.ts"
     ]
 }
